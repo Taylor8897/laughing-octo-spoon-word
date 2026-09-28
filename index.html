@@ -205,7 +205,20 @@
 
   .store-note{margin-top:20px;text-align:center;font-size:12px;color:#a9b1bb;}
 
-  /* ====== 云同步面板样式 ====== */
+  /* 顶部诊断条 */
+  .diag-bar{
+    background:#fffbeb;border:1px solid #fde68a;border-radius:10px;
+    padding:10px 14px;font-size:12px;color:#92400e;
+    display:flex;gap:12px;flex-wrap:wrap;align-items:center;
+    margin-bottom:16px;
+  }
+  .diag-bar b{color:#78350f;font-weight:600;}
+  .diag-bar .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    background:#fff;padding:2px 8px;border-radius:6px;border:1px solid #fde68a;
+    font-size:11.5px;color:#78350f;}
+  .diag-bar .ok{color:#059669;font-weight:600;}
+  .diag-bar .warn{color:#dc2626;font-weight:600;}
+
   .sync-card{padding:18px;margin-bottom:16px;}
   .sync-key-box{
     background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;
@@ -266,6 +279,14 @@
     </div>
   </header>
 
+  <!-- 诊断条 -->
+  <div class="diag-bar" id="diagBar">
+    <span>当前网址：<span class="code" id="diagHost">…</span></span>
+    <span>同步码：<span class="code" id="diagSync">…</span></span>
+    <span>本地数据：<b id="diagCount">0</b> 条</span>
+    <span id="diagHint" class="warn">检查中…</span>
+  </div>
+
   <section class="card input-card">
     <input id="taskInput" type="text" autocomplete="off"
            placeholder="输入今天学习的内容，例如：词组34-53、word list3（可用逗号一次输入多个）">
@@ -285,7 +306,6 @@
     </div>
   </div>
 
-  <!-- 今日复习 -->
   <main id="panelToday" class="panel">
     <div class="panel-head">
       <h2>今日复习</h2>
@@ -294,7 +314,6 @@
     <div id="todayList"></div>
   </main>
 
-  <!-- 总览 -->
   <main id="panelOverview" class="panel hidden">
     <div class="panel-head">
       <h2>总览</h2>
@@ -321,7 +340,6 @@
     <p class="store-note">数据保存在本机浏览器中，可随时「导出数据」备份</p>
   </main>
 
-  <!-- 云同步 -->
   <main id="panelSync" class="panel hidden">
     <div class="panel-head">
       <h2>云同步 · Supabase</h2>
@@ -351,10 +369,11 @@
 
       <div class="sync-tip">
         💡 <b>使用流程：</b><br>
-        1. 在本设备上，复制上面的同步码保存好（比如发到微信文件传输助手）。<br>
+        1. 在本设备上，复制上面的同步码保存好。<br>
         2. 每次添加/打卡/延期后，系统会在 2 秒后自动上传到云端。<br>
-        3. 换设备或清缓存后，在新设备输入同一个同步码，点「从云端恢复」，即可找回全部数据。<br>
-        4. 同步码一旦丢失，数据将无法从云端找回，请务必保存。
+        3. 换设备或清缓存后，在新设备输入同一个同步码，点「从云端恢复」。<br>
+        4. 同步码一旦丢失，数据将无法从云端找回，请务必保存。<br><br>
+        ⚠️ <b>重要：</b>每次打开系统请用<b>同一个正式网址</b>（比如 <code>https://taylor8897.github.io/laughing-octo-spoon-word/</code>），并把它添加到手机主屏幕。不要从微信、GitHub 仓库页等不同入口进入，否则数据会因域名不同而"看起来清零"。
       </div>
     </div>
   </main>
@@ -369,16 +388,20 @@
   /* ============ Supabase 配置 ============ */
   var SUPABASE_URL = 'https://fbwwylbqovbzjhgcolzd.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_P2OU9SAOhwSSoqZMytqsKw_Z55B4CK0';
-  var SYNC_ID_KEY  = 'ebbinghaus_sync_user_id';
-  var syncUserId   = localStorage.getItem(SYNC_ID_KEY);
+  var SYNC_ID_KEY  = 'ebbinghaus_sync_user_id_v2';
+
+  // 优先读本地已保存的同步码；没有才生成新的
+  var syncUserId = localStorage.getItem(SYNC_ID_KEY);
+  var isFirstVisit = false;
   if(!syncUserId){
     syncUserId = 'ebbinghaus_' + Math.random().toString(36).substring(2, 10);
     localStorage.setItem(SYNC_ID_KEY, syncUserId);
+    isFirstVisit = true;
   }
   var cloudSyncTimeout = null;
 
   /* ============ 常量 ============ */
-  const STORE_KEY  = 'ebbinghaus_plan_v1';
+  const STORE_KEY  = 'ebbinghaus_plan_v2';
   const EXAM_DATE  = '2026-12-19';
   const WEEK_CN    = '日一二三四五六';
 
@@ -395,7 +418,6 @@
     {bg:'#f8fafc', fg:'#334155', bd:'#cbd5e1'}
   ];
 
-  /* ============ 日期工具 ============ */
   function beijingToday(){
     const d = new Date(Date.now() + 8 * 3600 * 1000);
     return d.toISOString().slice(0, 10);
@@ -418,7 +440,6 @@
     });
   }
 
-  /* ============ 复习日期生成 ============ */
   function stageName(n){ return '第' + n + '次复习'; }
 
   function buildReviewDates(created){
@@ -447,7 +468,6 @@
     });
   }
 
-  /* ============ 状态 ============ */
   let state = { items: [], colorSeq: 0 };
   let manual = false;
   let currentDate = beijingToday();
@@ -479,7 +499,6 @@
     return { id: it.id, text: it.text, color: color, created: created, reviews: reviews };
   }
 
-  /* ============ 本地存储 + 云同步触发 ============ */
   function load(){
     try{
       const raw = localStorage.getItem(STORE_KEY);
@@ -497,10 +516,9 @@
   }
   function save(){
     try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){}
-    scheduleCloudSync();   // 每次保存后，延迟 2 秒自动上传到云端
+    scheduleCloudSync();
   }
 
-  /* ============ 云同步核心函数 ============ */
   function setSyncStatus(type, msg){
     const el = document.getElementById('syncStatus');
     if(!el) return;
@@ -549,7 +567,8 @@
         const row = data[0];
         const cloudItems = row.items || [];
         const localItems = state.items || [];
-        // 简单判断：如果本地为空，或者云端更多，就覆盖
+        // 本地为空 → 直接覆盖
+        // 本地有数据 → 云端更多才覆盖
         if(localItems.length === 0 || cloudItems.length > localItems.length){
           state.items = cloudItems.map(normalizeItem).filter(Boolean);
           state.colorSeq = Math.max(state.colorSeq || 0, state.items.length);
@@ -561,7 +580,13 @@
           return { pulled: false };
         }
       }else{
-        setSyncStatus('ok', '云端暂无数据，首次上传会自动创建');
+        // 云端没数据。如果是首次访问，就上传本地
+        if(state.items.length > 0){
+          cloudPush(true);
+          setSyncStatus('ok', '云端暂无数据，已自动上传本地 ' + state.items.length + ' 个项目');
+        }else{
+          setSyncStatus('ok', '云端暂无数据，去添加记忆项目吧');
+        }
         return { pulled: false };
       }
     }).catch(function(e){
@@ -581,7 +606,28 @@
     setSyncStatus('idle', '同步码已生成，数据变更后会自动上传');
   }
 
-  /* ============ DOM ============ */
+  function updateDiagBar(){
+    const hostEl = document.getElementById('diagHost');
+    const syncEl = document.getElementById('diagSync');
+    const cntEl  = document.getElementById('diagCount');
+    const hintEl = document.getElementById('diagHint');
+    if(hostEl) hostEl.textContent = location.hostname || '(本地文件)';
+    if(syncEl) syncEl.textContent = syncUserId;
+    if(cntEl) cntEl.textContent = state.items.length;
+    if(hintEl){
+      if(location.protocol === 'file:'){
+        hintEl.className = 'warn';
+        hintEl.textContent = '⚠️ 你正在用文件方式打开，数据不会保存。请用正式网址访问。';
+      }else if(state.items.length === 0){
+        hintEl.className = 'warn';
+        hintEl.textContent = '本地暂无数据（如果云端有，会自动下载）';
+      }else{
+        hintEl.className = 'ok';
+        hintEl.textContent = '✓ 数据已保存在本机（同一个网址下）';
+      }
+    }
+  }
+
   const $ = function(id){ return document.getElementById(id); };
   const pillEl      = $('todayPill');
   const pillTextEl  = $('pillText');
@@ -833,6 +879,7 @@
     renderToday();
     renderOverview();
     renderProjects();
+    updateDiagBar();
   }
 
   function doAdd(){
@@ -1028,7 +1075,6 @@
     toast('已回到今日');
   });
 
-  /* ============ Tab 切换（支持三个 tab） ============ */
   document.querySelectorAll('.tabs button').forEach(function(btn){
     btn.addEventListener('click', function(){
       document.querySelectorAll('.tabs button').forEach(function(b){ b.classList.remove('active'); });
@@ -1043,7 +1089,6 @@
     });
   });
 
-  /* ============ 云同步按钮 ============ */
   const copySyncCodeBtn = $('copySyncCodeBtn');
   if(copySyncCodeBtn){
     copySyncCodeBtn.addEventListener('click', function(){
@@ -1090,7 +1135,6 @@
     });
   }
 
-  /* ============ 自动校正北京时间 ============ */
   setInterval(function(){
     if(!manual){
       const t = beijingToday();
@@ -1113,9 +1157,15 @@
   render();
   renderSyncUI();
 
-  // 启动时尝试从云端拉取
+  // 启动时从云端拉取
   cloudPull().then(function(result){
     if(result.pulled){ render(); }
+    // 如果本地为空、云端也为空，且是首次访问 → 提示用户
+    if(state.items.length === 0 && isFirstVisit){
+      setTimeout(function(){
+        toast('欢迎！这是你的同步码，请复制保存好');
+      }, 800);
+    }
   });
 
 })();
